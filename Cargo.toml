@@ -1,6 +1,6 @@
 [package]
 name = "nb-fabric"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "CLI for managing Microsoft Fabric notebooks; create, edit cells, execute interactively, schedule, and query OneLake data"
 license = "GPL-3.0"
