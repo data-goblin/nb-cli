@@ -44,7 +44,7 @@ nb cell add "My Workspace/ETL Pipeline" --code "print('hello')"
 nb exec "My Workspace/ETL Pipeline" --code "print('hello')" --lakehouse MainLH
 
 # Run as a batch job
-nb run "My Workspace/ETL Pipeline" --wait
+nb job run "My Workspace/ETL Pipeline" --wait
 ```
 
 ## Command Reference
@@ -89,10 +89,10 @@ nb exec <ws/name>                  Execute code interactively via Livy
   --code <code>                      Code to execute
   <cell-index>                       Or execute a specific cell by index
   --lakehouse <name>                 Lakehouse for Livy session (auto-detected)
-nb run <ws/name>                   Run notebook as batch job
+nb job run <ws/name>               Run notebook as batch job
   --wait                             Wait for completion
   --timeout <secs>                   Timeout in seconds (default: 3600)
-nb runs <ws/name>                  List recent runs
+nb job list <ws/name>              List recent job runs
 ```
 
 Interactive execution auto-detects the kernel type from notebook metadata:
