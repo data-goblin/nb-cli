@@ -1,8 +1,7 @@
-<h1 align="center">nb</h1>
+<h1 align="center">Fabric notebook CLI</h1>
 
 <p align="center">
-  CLI for Microsoft Fabric notebooks <br/>
-  <i>Create, edit, execute, and schedule notebooks from the terminal</i>
+  A command-line interface to (try and) make it easier for agents to develop, execute, and manage notebooks in Microsoft Fabric
 </p>
 
 <p align="center">
