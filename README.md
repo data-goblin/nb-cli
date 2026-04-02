@@ -161,15 +161,6 @@ $ nb exec "My Workspace/Analytics" --code "print(2+2)" --lakehouse MainLH
   Session cleaned up
 ```
 
-## Building from Source
-
-```bash
-git clone https://github.com/data-goblin/nb-cli
-cd nb-cli
-cargo build --release
-# Binary at target/release/nb
-```
-
 ## Use or Re-use
 
 You do not have the license to copy and incorporate this into your own products, trainings, courses, or tools. If you copy this project or use an agent to rewrite it, you must include attribution and a link to the original project.
