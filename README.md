@@ -5,12 +5,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.3-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.4-blue" alt="Version">
   <img src="https://img.shields.io/badge/Microsoft%20Fabric-008272" alt="Microsoft Fabric">
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License">
 </p>
 
-> **Open beta.** Commands and flags may change between versions. Pin your version if stability matters.
+> **Experimental.** Commands and flags may change between versions. Pin your version if stability matters.
 
 ## Install
 
