@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.1-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-green" alt="Platform">
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License">
 </p>
@@ -40,12 +40,12 @@ nb create "My Workspace/ETL Pipeline" --kernel python --lakehouse MainLH
 # Add a cell
 nb cell add "My Workspace/ETL Pipeline" --code "print('hello')"
 
-# Execute interactively and see the output
-nb exec "My Workspace/ETL Pipeline" --code "print('hello')" --lakehouse MainLH
-
 # Run code directly against a lakehouse (no notebook needed)
-nb exec -q "My Workspace/MainLH.Lakehouse" --code "print('hello')"
-nb exec -q "My Workspace/MainLH.Lakehouse" --pyspark --code "spark.sql('SHOW TABLES').show()"
+nb exec code "My Workspace/MainLH.Lakehouse" "print('hello')"
+nb exec code "My Workspace/MainLH.Lakehouse" --pyspark "spark.sql('SHOW TABLES').show()"
+
+# Execute a notebook cell interactively
+nb exec cell "My Workspace/ETL Pipeline" 0 --lakehouse MainLH
 
 # Run as a batch job
 nb job run "My Workspace/ETL Pipeline" --wait
@@ -89,32 +89,26 @@ nb cell rm <ws/name> <index>       Remove a cell
 ### Execution
 
 ```
-nb exec <ws/notebook>              Execute code via a notebook's attached lakehouse
-  --code <code>                      Code to execute
-  <cell-index>                       Or execute a specific cell by index
-  --lakehouse <name>                 Lakehouse (auto-detected from notebook metadata)
+nb exec code <ws/lakehouse> <code>   Run code directly against a lakehouse (no notebook)
+  --pyspark                            Use PySpark runtime (includes Spark context)
+  --python                             Use Python runtime (default)
 
-nb exec -q <ws/lakehouse>          Quick ephemeral execution directly against a lakehouse
-  --code <code>                      Code to execute (use --code - for stdin)
-  --pyspark                          Use PySpark runtime (includes Spark context)
-  --python                           Use Python runtime (default)
+nb exec cell <ws/notebook> <index>   Execute a notebook cell via its attached lakehouse
+  --lakehouse <name>                   Lakehouse (auto-detected from notebook metadata)
 
-nb job run <ws/notebook>           Run notebook as batch job
-  --wait                             Wait for completion
-  --timeout <secs>                   Timeout in seconds (default: 3600)
-nb job list <ws/notebook>          List recent job runs
+nb job run <ws/notebook>             Run notebook as batch job
+  --wait                               Wait for completion
+  --timeout <secs>                     Timeout in seconds (default: 3600)
+nb job list <ws/notebook>            List recent job runs
 ```
 
-Interactive execution auto-detects the kernel type from notebook metadata.
-Both modes return output directly to the terminal with structured metadata on stderr.
-
-#### Quick Mode (`exec -q`)
+#### `exec code`
 
 Run Python or PySpark code against a lakehouse without creating a notebook.
-Sessions are created, used, and cleaned up automatically.
+Sessions are created, used, and cleaned up automatically. Pass `-` as the code arg to read from stdin.
 
 ```
-$ nb exec -q "My Workspace/MainLH.Lakehouse" --code "print(2+2)"
+$ nb exec code "My Workspace/MainLH.Lakehouse" "print(2+2)"
 ---- exec: Python ----
   Creating session...
   Waiting for idle...  (session a1b2c3d4)
@@ -129,10 +123,19 @@ $ nb exec -q "My Workspace/MainLH.Lakehouse" --code "print(2+2)"
   status   ok
 ```
 
-Supports stdin piping for agents:
+Stdin piping for agents:
 
 ```bash
-echo "spark.sql('SELECT count(*) FROM my_table').show()" | nb exec -q "WS/LH.Lakehouse" --pyspark --code -
+echo "spark.sql('SELECT count(*) FROM my_table').show()" | nb exec code "WS/LH.Lakehouse" --pyspark -
+```
+
+#### `exec cell`
+
+Execute a specific cell from a notebook. Auto-detects kernel type and lakehouse from notebook metadata.
+
+```bash
+nb exec cell "My Workspace/ETL Pipeline" 0
+nb exec cell "My Workspace/ETL Pipeline" 3 --lakehouse MainLH
 ```
 
 ### Sessions
