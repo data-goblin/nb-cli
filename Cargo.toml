@@ -1,12 +1,12 @@
 [package]
 name = "nb-fabric"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "CLI for managing Microsoft Fabric notebooks; create, edit cells, execute interactively, schedule, and query OneLake data"
 license = "GPL-3.0"
 repository = "https://github.com/data-goblin/nb-cli"
 homepage = "https://github.com/data-goblin/nb-cli"
-keywords = ["fabric", "notebook", "livy", "onelake", "duckdb"]
+keywords = ["fabric", "notebook", "pyspark", "onelake", "duckdb"]
 categories = ["command-line-utilities", "development-tools"]
 include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]
 

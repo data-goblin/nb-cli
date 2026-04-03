@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.0-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-green" alt="Platform">
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License">
 </p>
@@ -42,6 +42,10 @@ nb cell add "My Workspace/ETL Pipeline" --code "print('hello')"
 
 # Execute interactively and see the output
 nb exec "My Workspace/ETL Pipeline" --code "print('hello')" --lakehouse MainLH
+
+# Run code directly against a lakehouse (no notebook needed)
+nb exec -q "My Workspace/MainLH.Lakehouse" --code "print('hello')"
+nb exec -q "My Workspace/MainLH.Lakehouse" --pyspark --code "spark.sql('SHOW TABLES').show()"
 
 # Run as a batch job
 nb job run "My Workspace/ETL Pipeline" --wait
@@ -85,48 +89,78 @@ nb cell rm <ws/name> <index>       Remove a cell
 ### Execution
 
 ```
-nb exec <ws/name>                  Execute code interactively via Livy
+nb exec <ws/notebook>              Execute code via a notebook's attached lakehouse
   --code <code>                      Code to execute
   <cell-index>                       Or execute a specific cell by index
-  --lakehouse <name>                 Lakehouse for Livy session (auto-detected)
-nb job run <ws/name>               Run notebook as batch job
+  --lakehouse <name>                 Lakehouse (auto-detected from notebook metadata)
+
+nb exec -q <ws/lakehouse>          Quick ephemeral execution directly against a lakehouse
+  --code <code>                      Code to execute (use --code - for stdin)
+  --pyspark                          Use PySpark runtime (includes Spark context)
+  --python                           Use Python runtime (default)
+
+nb job run <ws/notebook>           Run notebook as batch job
   --wait                             Wait for completion
   --timeout <secs>                   Timeout in seconds (default: 3600)
-nb job list <ws/name>              List recent job runs
+nb job list <ws/notebook>          List recent job runs
 ```
 
-Interactive execution auto-detects the kernel type from notebook metadata:
-- **Python notebooks** use Livy `kind=python`
-- **PySpark notebooks** use Livy `kind=pyspark`
+Interactive execution auto-detects the kernel type from notebook metadata.
+Both modes return output directly to the terminal with structured metadata on stderr.
 
-Both return cell output directly to the terminal.
+#### Quick Mode (`exec -q`)
+
+Run Python or PySpark code against a lakehouse without creating a notebook.
+Sessions are created, used, and cleaned up automatically.
+
+```
+$ nb exec -q "My Workspace/MainLH.Lakehouse" --code "print(2+2)"
+---- exec: Python ----
+  Creating session...
+  Waiting for idle...  (session a1b2c3d4)
+  Session ready.
+  Submitting code...
+4
+  Session cleaned up.
+---- result ----
+  session  a1b2c3d4-...
+  runtime  Python
+  duration 10.2s
+  status   ok
+```
+
+Supports stdin piping for agents:
+
+```bash
+echo "spark.sql('SELECT count(*) FROM my_table').show()" | nb exec -q "WS/LH.Lakehouse" --pyspark --code -
+```
 
 ### Sessions
 
 ```
-nb session <ws/name>               Show active Livy sessions
+nb session <ws/notebook>           Show active sessions for a notebook
 ```
 
 ### Scheduling
 
 ```
-nb schedule list <ws/name>         List schedules
-nb schedule create <ws/name>       Create a schedule
+nb schedule list <ws/notebook>     List schedules
+nb schedule create <ws/notebook>   Create a schedule
   --type Cron|Daily|Weekly           Schedule type (default: Cron)
   --interval <n>                     Interval (minutes for Cron)
   --start <datetime>                 Start time (ISO 8601)
   --end <datetime>                   End time (optional)
   --timezone <tz>                    Timezone (default: UTC)
   --enable                           Enable immediately
-nb schedule update <ws/name> <id>  Update a schedule
+nb schedule update <ws/notebook> <id>  Update a schedule
   --enable true|false                Enable or disable
   --interval <n>                     New interval
-nb schedule delete <ws/name> <id>  Delete a schedule
+nb schedule delete <ws/notebook> <id>  Delete a schedule
 ```
 
 ## How It Works
 
-`nb` authenticates via Azure CLI (`az account get-access-token`) using the same credentials as `fab` and `az`. It calls the [Fabric REST API](https://learn.microsoft.com/en-us/rest/api/fabric/articles/) for notebook management and the [Livy API](https://learn.microsoft.com/en-us/fabric/data-engineering/api-livy-overview) for interactive execution.
+`nb` authenticates via Azure CLI (`az account get-access-token`) using the same credentials as `fab` and `az`. It calls the [Fabric REST API](https://learn.microsoft.com/en-us/rest/api/fabric/articles/) for notebook management and interactive execution.
 
 ### Authentication
 
@@ -145,20 +179,7 @@ nb auth status  # Verify
 |-------|--------|---------|
 | `kernel_info.name` | `jupyter` | `synapse_pyspark` |
 | `microsoft.language_group` | `jupyter_python` | `synapse_pyspark` |
-| Livy `kind` | `python` | `pyspark` |
-
-### Interactive Execution
-
-`nb exec` creates a Livy session, submits code, returns output, and cleans up the session:
-
-```
-$ nb exec "My Workspace/Analytics" --code "print(2+2)" --lakehouse MainLH
-  Creating Livy session (kind=python)...
-  Session created; waiting for idle state...
-  Submitting code...
-4
-  Session cleaned up
-```
+| Runtime `kind` | `python` | `pyspark` |
 
 ## Use or Re-use
 
