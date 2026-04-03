@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.2-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.4.3-blue" alt="Version">
   <img src="https://img.shields.io/badge/Microsoft%20Fabric-008272" alt="Microsoft Fabric">
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License">
 </p>
@@ -42,7 +42,7 @@ nb cell add "My Workspace/ETL Pipeline" --code "print('hello')"
 
 # Run code directly against a lakehouse (no notebook needed)
 nb exec code "My Workspace/MainLH.Lakehouse" "print('hello')"
-nb exec code "My Workspace/MainLH.Lakehouse" --pyspark "spark.sql('SHOW TABLES').show()"
+nb exec code "My Workspace/MainLH.Lakehouse" "spark.sql('SHOW TABLES').show()"
 
 # Execute a notebook cell interactively
 nb exec cell "My Workspace/ETL Pipeline" 0 --lakehouse MainLH
@@ -90,8 +90,6 @@ nb cell rm <ws/name> <index>       Remove a cell
 
 ```
 nb exec code <ws/lakehouse> <code>   Run code directly against a lakehouse (no notebook)
-  --pyspark                            Use PySpark runtime (includes Spark context)
-  --python                             Use Python runtime (default)
 
 nb exec cell <ws/notebook> <index>   Execute a notebook cell via its attached lakehouse
   --lakehouse <name>                   Lakehouse (auto-detected from notebook metadata)
@@ -104,8 +102,9 @@ nb job list <ws/notebook>            List recent job runs
 
 #### `exec code`
 
-Run Python or PySpark code against a lakehouse without creating a notebook.
-Sessions are created, used, and cleaned up automatically. Pass `-` as the code arg to read from stdin.
+Run Python code against a lakehouse without creating a notebook. The `spark` (SparkSession) variable
+is always available for querying lakehouse tables. Sessions are created, used, and cleaned up
+automatically (including on Ctrl+C). Pass `-` as the code arg to read from stdin.
 
 ```
 $ nb exec code "My Workspace/MainLH.Lakehouse" "print(2+2)"
@@ -126,7 +125,7 @@ $ nb exec code "My Workspace/MainLH.Lakehouse" "print(2+2)"
 Stdin piping for agents:
 
 ```bash
-echo "spark.sql('SELECT count(*) FROM my_table').show()" | nb exec code "WS/LH.Lakehouse" --pyspark -
+echo "spark.sql('SELECT count(*) FROM my_table').show()" | nb exec code "WS/LH.Lakehouse" -
 ```
 
 #### `exec cell`
