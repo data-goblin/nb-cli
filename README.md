@@ -106,6 +106,10 @@ Run Python code against a lakehouse without creating a notebook. The `spark` (Sp
 is always available for querying lakehouse tables. Sessions are created, used, and cleaned up
 automatically (including on Ctrl+C). Pass `-` as the code arg to read from stdin.
 
+<p align="center">
+  <img src="assets/exec-code-demo.png" alt="nb exec code demo" width="700">
+</p>
+
 ```
 $ nb exec code "My Workspace/MainLH.Lakehouse" "print(2+2)"
 ---- exec: Python ----
