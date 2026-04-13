@@ -31,8 +31,6 @@ struct WorkspaceList {
 pub struct FabricItem {
     pub id: String,
     pub display_name: String,
-    #[serde(rename = "type")]
-    pub item_type: String,
     pub description: Option<String>,
 }
 
@@ -61,7 +59,6 @@ pub struct DefinitionBody {
 pub struct DefinitionPart {
     pub path: String,
     pub payload: String,
-    pub payload_type: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -209,28 +206,122 @@ pub fn parse_ref(reference: &str) -> Result<(&str, &str)> {
 
 
 /// Create an item via the Fabric REST API.
+/// Handles both 201 (immediate item JSON) and 202 (long-running operation)
+/// responses. For 202, polls the operation via the `Location` header until it
+/// succeeds, then resolves the final item from the workspace item list by
+/// display name (Fabric's create LRO does not return a resource URL for items).
 pub async fn create_item(
     client: &Client,
     workspace_id: &str,
     body: &serde_json::Value,
 ) -> Result<FabricItem> {
-    let token = auth::get_fabric_token()?;
-    let resp = client
-        .post(format!("{}/workspaces/{}/items", FABRIC_BASE, workspace_id))
-        .bearer_auth(&token)
-        .json(body)
-        .send()
-        .await
-        .context("Failed to create item")?;
+    // Retry loop for Fabric's transient post-delete display-name reservation
+    // lag (`ItemDisplayNameNotAvailableYet`). Fabric marks this error
+    // `isRetriable:true` and typically clears within a minute. Linear backoff
+    // 5s, 10s, ... 40s sums to 180s (~3 min) before surfacing the error.
+    let mut attempt: u32 = 0;
+    let resp = loop {
+        let token = auth::get_fabric_token()?;
+        let resp = client
+            .post(format!("{}/workspaces/{}/items", FABRIC_BASE, workspace_id))
+            .bearer_auth(&token)
+            .json(body)
+            .send()
+            .await
+            .context("Failed to create item")?;
 
+        let status = resp.status();
+        if status.is_success() {
+            break resp;
+        }
+
+        let raw = resp.text().await.unwrap_or_default();
+        let code = serde_json::from_str::<serde_json::Value>(&raw)
+            .ok()
+            .and_then(|v| v.get("errorCode").and_then(|c| c.as_str()).map(str::to_string))
+            .unwrap_or_default();
+        let transient = status.as_u16() == 409 && code == "ItemDisplayNameNotAvailableYet";
+        if transient && attempt < 8 {
+            let wait = 5u64 + u64::from(attempt) * 5;
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            attempt += 1;
+            continue;
+        }
+        anyhow::bail!("POST create item failed ({}): {}", status, raw);
+    };
     let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("POST create item failed ({}): {}", status, body);
+
+    if status.as_u16() == 202 {
+        let location = resp
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let retry_after = resp
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(2);
+        let location = location.context("202 response but no Location header")?;
+        poll_create_operation(client, &location, retry_after).await?;
+
+        let display_name = body
+            .get("displayName")
+            .and_then(|v| v.as_str())
+            .context("create_item called without displayName in body")?;
+        let item_type = body
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Notebook");
+        return resolve_item(client, workspace_id, display_name, item_type).await;
     }
 
     let item: FabricItem = resp.json().await?;
     Ok(item)
+}
+
+
+/// Poll a create/update LRO until it reports Succeeded (or fail/time out).
+async fn poll_create_operation(client: &Client, poll_url: &str, initial_retry: u64) -> Result<()> {
+    // 180 iterations x ~2s = ~6 minutes; Fabric notebook creation on cold
+    // capacity can legitimately exceed 2 minutes.
+    let mut wait = initial_retry.max(1);
+    for _ in 0..180 {
+        tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+
+        let token = auth::get_fabric_token()?;
+        let resp = client
+            .get(poll_url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .context("Failed to poll create operation")?;
+
+        let status = resp.status();
+        if status.as_u16() == 202 {
+            wait = 2;
+            continue;
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Create LRO poll failed ({}): {}", status, body);
+        }
+        let body: serde_json::Value = resp.json().await.unwrap_or(serde_json::Value::Null);
+        let op_status = body.pointer("/status").and_then(|v| v.as_str()).unwrap_or("");
+        match op_status {
+            "Succeeded" => return Ok(()),
+            "Failed" => {
+                let error = body.pointer("/error").cloned().unwrap_or(serde_json::Value::Null);
+                anyhow::bail!("Create operation failed: {}", error);
+            }
+            _ => {
+                wait = 2;
+                continue;
+            }
+        }
+    }
+    anyhow::bail!("Create operation timed out")
 }
 
 
@@ -573,59 +664,6 @@ async fn poll_until_done(
     }
 
     anyhow::bail!("Operation timed out after polling")
-}
-
-
-/// Get the capacity ID for a workspace.
-/// Fetches workspace details and extracts the capacityId field.
-pub async fn get_workspace_capacity(
-    client: &Client,
-    workspace_id: &str,
-) -> Result<String> {
-    let token = auth::get_fabric_token()?;
-    let resp = client
-        .get(format!("{}/workspaces/{}", FABRIC_BASE, workspace_id))
-        .bearer_auth(&token)
-        .send()
-        .await
-        .context("Failed to get workspace details")?;
-
-    let status = resp.status();
-    if !status.is_success() {
-        let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("GET workspace failed ({}): {}", status, body);
-    }
-
-    let ws: serde_json::Value = resp.json().await?;
-    let capacity_id = ws
-        .get("capacityId")
-        .and_then(|v| v.as_str())
-        .context("No capacityId in workspace details")?
-        .to_string();
-
-    Ok(capacity_id)
-}
-
-
-/// Get the WABI host from the Fabric API response headers.
-/// The `home-cluster-uri` header contains the region-specific WABI endpoint.
-pub async fn get_wabi_host(client: &Client) -> Result<String> {
-    let token = auth::get_fabric_token()?;
-    let resp = client
-        .get(format!("{}/workspaces", FABRIC_BASE))
-        .bearer_auth(&token)
-        .send()
-        .await
-        .context("Failed to call Fabric API for WABI host")?;
-
-    let wabi = resp
-        .headers()
-        .get("home-cluster-uri")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim_end_matches('/').to_string())
-        .unwrap_or_else(|| "https://wabi-west-europe-e-primary-redirect.analysis.windows.net".to_string());
-
-    Ok(wabi)
 }
 
 

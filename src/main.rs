@@ -14,6 +14,10 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "nb", version, about = "Fabric notebook CLI [experimental; commands may change]")]
 struct Cli {
+    /// Suppress spinners and ANSI colour; print machine-friendly output only.
+    #[arg(short = 'q', long, global = true)]
+    quiet: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -344,6 +348,7 @@ enum ScheduleAction {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    spinner::set_quiet(cli.quiet);
     let http = client::build_client()?;
 
     match cli.command {

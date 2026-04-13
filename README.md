@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.4.5-blue" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.6.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/Microsoft%20Fabric-008272" alt="Microsoft Fabric">
   <img src="https://img.shields.io/badge/license-GPL--3.0-green" alt="License">
 </p>

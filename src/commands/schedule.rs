@@ -153,22 +153,43 @@ pub async fn run_schedule_update(
         FABRIC_BASE, ws_id, nb.id, schedule_id
     );
 
-    let mut body = serde_json::json!({});
+    // Fabric's schedule PATCH requires the full `configuration` object even
+    // for partial updates. Fetch the current schedule, then send back a
+    // minimal allow-listed `{enabled, configuration}` body merged with any
+    // user-supplied overrides. Allow-listing avoids echoing server-managed
+    // fields (`id`, `createdDateTime`, `owner`, future additions) that
+    // Fabric rejects on round-trip.
+    let current = http
+        .get(&url)
+        .bearer_auth(&token)
+        .send()
+        .await
+        .context("Failed to fetch current schedule")?;
+    if !current.status().is_success() {
+        let status = current.status();
+        let body = current.text().await.unwrap_or_default();
+        anyhow::bail!("GET schedule failed ({}): {}", status, body);
+    }
+    let current: serde_json::Value = current.json().await?;
+
+    let mut config = current
+        .get("configuration")
+        .cloned()
+        .context("Schedule response missing 'configuration' object")?;
+    let mut body = serde_json::json!({
+        "enabled": current.get("enabled").cloned().unwrap_or(serde_json::Value::Bool(true)),
+    });
 
     if let Some(e) = enabled {
         body["enabled"] = serde_json::Value::Bool(e);
     }
-
-    if interval.is_some() || schedule_type.is_some() {
-        let mut config = serde_json::json!({});
-        if let Some(i) = interval {
-            config["interval"] = serde_json::json!(i);
-        }
-        if let Some(t) = schedule_type {
-            config["type"] = serde_json::Value::String(t.to_string());
-        }
-        body["configuration"] = config;
+    if let Some(i) = interval {
+        config["interval"] = serde_json::json!(i);
     }
+    if let Some(t) = schedule_type {
+        config["type"] = serde_json::Value::String(t.to_string());
+    }
+    body["configuration"] = config;
 
     let resp = http
         .patch(&url)
